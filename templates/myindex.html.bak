@@ -1,0 +1,359 @@
+<html lang="zh-CN">
+    <head>
+        <meta charset="utf-8"> 
+        <title>定位电子工牌</title>
+        <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+        <script src="/static/js/jquery.min.js"></script>
+        <script src="/static/js/bootstrap.min.js"></script>
+
+        <script src="/static/js/echarts.common.min.js"></script>
+        <!-- <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/echarts.min.js"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts-gl/echarts-gl.min.js"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts-stat/ecStat.min.js"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/extension/dataTool.min.js"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/map/js/china.js"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/map/js/world.js"></script>
+        <script type="text/javascript" src="https://api.map.baidu.com/api?v=2.0&ak=ZUONbpqGBsYGXNIYHicvbAbM"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/echarts/extension/bmap.min.js"></script>
+        <script type="text/javascript" src="http://echarts.baidu.com/gallery/vendors/simplex.js"></script> -->
+        <script type="text/javascript" src="/static/js/echarts.min.js"></script>
+        <script type="text/javascript" src="/static/js/echarts-gl.min.js"></script>
+        <script type="text/javascript" src="/static/js/ecStat.min.js"></script>
+        <script type="text/javascript" src="/static/js/dataTool.min.js"></script>
+        <script type="text/javascript" src="/static/js/china.js"></script>
+        <script type="text/javascript" src="/static/js/world.js"></script>
+        <!-- <script type="text/javascript" src="https://api.map.baidu.com/api?v=2.0&ak=ZUONbpqGBsYGXNIYHicvbAbM"></script> -->
+        <script type="text/javascript" src="/static/js/bmap.min.js"></script>
+        <script type="text/javascript" src="/static/js/simplex.js"></script>
+
+        <!-- end: Favicon -->
+        <script>
+            aid_list = {};
+            function terminal_alarm(uid) {
+                // 报警信息处理
+                console.log('terminal alarm');
+                console.log("%o", uid);
+                var d = new Date();
+                if (d.getSeconds() % 2) {
+                    highlight_chart(uid);
+                }
+                else {
+                    downplay_chart(uid);
+                }
+            }
+            var websock = new WebSocket("ws://127.0.0.1:8080/web/");
+            websock.onmessage = function(evt) {
+                var i;
+                var res = evt.data;
+                var pos_data = JSON.parse(res);
+                // 协议解析
+                console.log("%o", pos_data);
+                switch(pos_data.type) {
+                    case 0x07:
+                    // 报警信息上传
+                        //alert(pos_data.id + "alarm");
+                        var aid = setInterval(function() {terminal_alarm(pos_data.id)},1000);
+                        aid_list[pos_data.id] = aid;
+                        var alarm_btn = document.getElementById(pos_data.id + "-alarm-msg");
+                        alarm_btn.removeAttribute('disabled');
+                        // console.log("%o", alarm_btn);
+                        break;
+                    case 0x08:
+                    // 坐标位置上报
+                        var oldopt = chart.getOption();      // 获取当前设置项
+                        for (i=0;i<oldopt.series.length;i++) {
+                            if (String(oldopt.series[i].name) == pos_data.id) {
+                                console.log("%o", oldopt.series[i].name);
+                                oldopt.series[i].data[0][0] = pos_data.message.x;
+                                oldopt.series[i].data[0][1] = pos_data.message.y;
+                                chart.setOption(oldopt);
+                                break;
+                            }
+                        }
+                        console.log("%o", oldopt);
+                        break;
+                }
+            };
+        </script>
+        <script type="text/javascript">
+            function append_data()
+            {
+                chart = echarts.init(document.getElementById("main"));
+                var option = {
+                    title: {
+                        text: "位置",
+                        left: "center"
+                    },
+                    tooltip: {
+                    },
+                    xAxis:{
+                        min: 0,
+                        max: 150
+                    },
+                    yAxis:{
+                        min: 0,
+                        max: 150
+                    },
+                    color: [
+                        'gray'
+                    ],
+                    series: [
+                        {% for terminal in terminals %}
+                            {
+                                type:"scatter",
+                                name: {{terminal.uid}},
+                                encode: {
+                                    x: 0,
+                                    y: 1
+                                },
+                                tooltip: {
+                                    formatter: function(params) {
+                                        return {{terminal.uid}} + '<br>' + 'x:' + params.data[0] + ' y:' + params.data[1];
+                                    }
+                                },
+                                dimensions: ['x','y'],
+                                data:[
+                                    [{{terminal.x}}, {{terminal.y}}]
+                                ]
+                            },
+                        {% end %}  
+                        {
+                            type:"scatter",
+                            name:"pos",
+                            data:[]
+                        }
+                    ]
+                };
+                chart.setOption(option);
+                opt = chart.getOption();
+            }
+            $(document).ready(append_data);
+        </script>
+        <script type="text/javascript">
+            function info_update(uid) {
+                console.log("info update");
+                var modal_name = document.getElementById(uid+"-name");
+                var modal_depart = document.getElementById(uid+"-depart");
+                var modal_level = document.getElementById(uid+"-level");
+                var modal_uid = document.getElementById(uid+"-uid");
+                if (modal_name.value == "")
+                    name = modal_name.placeholder;
+                else
+                    name = modal_name.value;
+
+                if (modal_depart.value == "")
+                    depart = modal_depart.placeholder;
+                else
+                    depart = modal_depart.value;
+
+                if (modal_level.value == "")
+                    level = modal_level.placeholder;
+                else
+                    level = modal_level.value;
+
+                if (modal_uid.value == "")
+                    uid = modal_uid.placeholder;
+                else {
+                    uid = modal_uid.value;
+                }
+
+                var msgdata = {'name':name, 'depart':depart, 'level':level, 'uid':uid};
+                var msg = {'id':modal_uid.placeholder, 'type':0x03, 'message':msgdata};
+                data = JSON.stringify(msg);
+                console.log("%o",data);
+                websock.send(data);
+            }
+        </script>
+        <script type="text/javascript">
+            function highlight_chart(uid) {
+                chart.dispatchAction({
+                    type:'highlight',
+                    seriesName: uid
+                });
+                var uid_btn = document.getElementById(uid + "-btn");
+                uid_btn.setAttribute("class", "btn btn-primary");
+            }
+            function downplay_chart(uid) {
+                chart.dispatchAction({
+                    type:'downplay',
+                    seriesName: uid
+                });
+                var uid_btn = document.getElementById(uid + "-btn");
+                uid_btn.setAttribute("class", "btn btn-default");
+            }
+        </script>
+        <script type="text/javascript">
+            function clear_msg(uid) {
+                clearInterval(aid_list[uid]);
+                downplay_chart(uid);
+                var alarm_btn = document.getElementById(uid + "-alarm-msg");
+                alarm_btn.setAttribute("disabled", "true");
+            }
+        </script>
+    </head>
+            
+    <body class="container" style="margin-left:10px">
+        <div class="row">
+        <nav class="navbar navbar-default" role="navigation">
+            <div class="container">
+                <div>
+                    <form enctype="multipart/form-data" action="http://127.0.0.1:8080/" method="POST" class="navbar-form navbar-left" role="form">
+                        <div class="form-group">
+                            <input type="file" accept="*.csv" name="csvfile">
+                        </div>
+                        <button type="submit" value="上传" class="btn btn-default">提交</button>
+                    </form>
+                    <iframe id="localpage" name="localpage" style="display:none"></iframe>
+                </div>
+                <!-- 文件导入 -->
+                <button onclick="cal_time()" class="btn btn-default navbar-btn">时间同步
+                    <script>
+                        function cal_time() {
+                        // 校时
+                            var msg = {'id':0x01, 'type':0x01, 'message':0x00};
+                            data = JSON.stringify(msg);
+                            websock.send(data);
+                            // console.log("%o", chart.getOption());
+                        }
+                    </script>
+                </button>
+                <button onclick="download()" class="btn btn-default navbar-btn">下载数据
+                    <script>
+                        function download() {
+                            // 下载数据
+                            var msg = {'id':0x01, 'type':0x04, 'message':0x00};
+                            data = JSON.stringify(msg);
+                            websock.send(data);
+                        }
+                    </script>
+                </button>
+                <button id="start_refresh" onclick="start_refresh()" class="btn btn-default navbar-btn">开始更新</button>
+                <script>
+                    // 定位轮询开关
+                    var switch_cnt = 0x00;
+                    function start_refresh() {
+                        var dom = document.getElementById('start_refresh');
+                        console.log("%o", dom.innerText);
+                        if (dom.innerText == '开始更新') {
+                            dom.innerText = '停止更新';
+                            switch_cnt = 0x01;
+                        }
+                        else {
+                            dom.innerText = '开始更新';
+                            switch_cnt = 0x02;
+                        }
+                        var message = {
+                            'id':0x01,
+                            'type':0x02,
+                            'message':switch_cnt
+                        };
+                        data = JSON.stringify(message)
+                        console.log("%o", data);
+                        websock.send(data)
+                    }
+                </script>
+                <!-- 消息通知 -->
+                <div>
+                    <button id="msg-to-btn" type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+                        @<span id="msg-to-btn-id">All</span>
+                        <span class="caret"></span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li onclick="chg_msg_to('All')" class="list-group-item">
+                            All
+                        </li>
+                        {% for terminal in terminals %}
+                            <li id="{{terminal.uid}}-msg-to" onclick="chg_msg_to({{terminal.uid}})" class="list-group-item">
+                                {{terminal.uid}}
+                            </li>
+                        {% end %}
+                    </ul>
+                    <script>
+                        function chg_msg_to(uid) {
+                            console.log("%o",uid);
+                            var msg_to_btn = document.getElementById("msg-to-btn-id");
+                            msg_to_btn.innerHTML = uid;
+                        }
+                    </script>
+                    <input type="text" id="msg-box" class="form-control" placeholder="不超过10个汉字">
+                    <button type="submit" onclick="submit_msg()" class="btn btn-default">提交</button>
+                    <script>
+                        function submit_msg() {
+                            var msg_box = document.getElementById('msg-box');
+                            if (msg_box.value == "")
+                                alert("请输入需要提交的信息！");
+                            else {
+                                var dst_id = document.getElementById('msg-to-btn-id');
+                                var msgdata = document.getElementById('msg-box').value;
+                                id = dst_id.innerHTML;
+                                var msg = {'id':id, 'type':0x06, 'message':msgdata};
+                                data = JSON.stringify(msg);
+                                console.log("%o", data);
+                                websock.send(data);
+                            }
+                        }
+                    </script>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 终端在线列表 -->
+        <div id="online_list" class="col-md-4 column">
+            {% for terminal in terminals %}
+            <ul class="list-group" style="margin-bottom:1px; margin-right:0px">
+                <button id="{{terminal.uid}}-btn" class="btn btn-default" data-toggle="modal" data-target="#{{terminal.uid}}"
+                    onmouseover="highlight_chart('{{terminal.uid}}')" onmouseout="downplay_chart('{{terminal.uid}}')">
+                    {{terminal.uid}}
+                </button>
+                <!-- 模态框 -->
+                <div class="modal fade" id="{{terminal.uid}}" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">                                
+                                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+                                    &times;
+                                </button>
+                                <h4 class="modal-title" id="myModalLabel">{{terminal.uid}}&nbsp;信息修改</h4>
+                            </div>
+                            <div class="modal-body">
+                                <div style="margin-left:30px">
+                                    <li><input type="text" id="{{terminal.uid}}-name" placeholder="{{terminal.name}}">姓名</li>
+                                    <li><input type="text" id="{{terminal.uid}}-depart" placeholder="{{terminal.depatment}}">科室</li>
+                                    <li><input type="text" id="{{terminal.uid}}-level" placeholder="{{terminal.level}}">职级</li>
+                                    <li><input type="text" id="{{terminal.uid}}-uid" placeholder="{{terminal.uid}}">工号</li>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
+                                <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="info_update('{{terminal.uid}}')">提交更改</button>
+                                <button type="button" id="{{terminal.uid}}-alarm-msg" data-dismiss="modal" class="btn btn-primary" onclick="clear_msg('{{terminal.uid}}')" disabled>
+                                    处理报警信息
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 模态框结束 -->
+            </ul>
+            {% end %}
+        </div>
+        <!-- 坐标位置 -->
+        <div id="pos" class="col-md-8 column" style="margin: 0%">
+            <!-- 时间标签 -->
+            <div id="time_clock">
+                <!--setInterval实时显示时间-->
+                <p id="time1" style="color: blueviolet;"></p>
+                <script>
+                    function mytime(){
+                        var a = new Date();
+                        var b = a.toLocaleTimeString();
+                        var c = a.toLocaleDateString();
+                        document.getElementById("time1").innerHTML = c+"&nbsp"+b;
+                        }
+                    setInterval(function() {mytime()},1000);
+                </script>
+            </div>
+            <div id="main" style="width:630px; height: 630px"></div>
+        </div>
+    </body>
+</html>
